@@ -1,0 +1,5 @@
+CREATE DATABASE tuneUp;
+
+CREATE USER tune_admin WITH PASSWORD 'password';
+
+GRANT ALL PRIVILEGES ON DATABASE tuneUp TO tune_admin;

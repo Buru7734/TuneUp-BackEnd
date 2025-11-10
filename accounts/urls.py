@@ -1,0 +1,50 @@
+
+from django.urls import path
+from .views import (
+    RegisterView,
+    LoginView,
+    ProfileView,
+    UserListView,
+    UserDetailView,
+    NotificationListView,
+    NotificationMarkReadView,
+    PublicProfileView,
+    # FollowUserView,
+    # UnfollowUserView,
+    RemoveFollowerView,
+    FollowersListView,
+    FollowingListView,
+    MutualFollowersView,
+    MutualFollowingView,
+    FollowSuggestionsView,
+    AdvancedFollowSuggestionsView,
+    SendFollowRequestView,
+    AcceptFollowRequestView,
+    RejectFollowRequestView,
+    PendingFollowRequestsView
+)
+
+
+urlpatterns = [
+    path('register/', RegisterView.as_view(), name='register'),
+    path('login/', LoginView.as_view(), name='login'),
+    path('profile/', ProfileView.as_view(), name='profile'),
+    path('users/', UserListView.as_view(), name='user-list'),
+    path('users/<int:id>/', UserDetailView.as_view(), name='user-detail'),
+    path('notifications/', NotificationListView.as_view(), name='notification-list'),
+    path('notifications/<int:id>/read/', NotificationMarkReadView.as_view(), name='notification-read'),
+    path('users/<int:id>/public/', PublicProfileView.as_view(), name='public-profile'),
+    # path('users/<int:user_id>/follow/', FollowUserView.as_view(), name='follow-user'),
+    # path('users/<int:user_id>/unfollow/', UnfollowUserView.as_view(), name='unfollow-user'),
+    path('users/<int:user_id>/remove-follower/', RemoveFollowerView.as_view(), name="remove-follower"),
+    path('users/<int:user_id>/followers/', FollowersListView.as_view(), name='followers-list'),
+    path('users/<int:user_id>/following/', FollowingListView.as_view(), name='following-list'),
+    path('users/<int:user_id>/mutual-followers/<int:other_id>/', MutualFollowersView.as_view(), name='mutual-followers'),
+    path('users/<int:user_id>/mutual-following/<int:other_id>/', MutualFollowingView.as_view(), name="mutual=following"),
+    path('users/<int:user_id>/suggestions/', FollowSuggestionsView.as_view(), name='follow-suggestions'),
+    path('users/<int:user_id>/advanced-suggestions/', AdvancedFollowSuggestionsView.as_view(), name="advanced-follow-suggestions"),
+    path('users/<int:user_id>/follow-request/', SendFollowRequestView.as_view(), name="send-follow-request"),
+    path('follow-request/<int:request_id>/accept/', AcceptFollowRequestView.as_view(), name="accept-follow-request"),
+    path('follow-request/<int:request_id>/reject/', RejectFollowRequestView.as_view(), name="reject-follow-request"),
+    path('follow-request/pending/', PendingFollowRequestsView.as_view(), name="pending-follow-request")
+]
