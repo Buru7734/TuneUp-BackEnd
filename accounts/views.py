@@ -13,6 +13,7 @@ from django.core.cache import cache
 from datetime import timedelta
 from django.db.models.functions import Coalesce
 import math, random
+from rest_framework.pagination import PageNumberPagination
  
 
 User = get_user_model()
@@ -90,9 +91,13 @@ class UserDetailView(generics.RetrieveAPIView):
     permission_classes = [permissions.AllowAny]
     lookup_field = 'id'
     
+class NotificationPagination(PageNumberPagination):
+    page_size = 10
+    
 class NotificationListView(generics.ListAPIView):
     serializer_class = NotificationSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = NotificationPagination
     
     def get_queryset(self):
         return Notification.objects.filter(user=self.request.user).order_by('-created_at')
@@ -121,37 +126,6 @@ class PublicProfileView(generics.RetrieveAPIView):
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
-    
-# class FollowUserView(APIView):
-#     permission_classes = [permissions.IsAuthenticated]
-    
-#     def post(self, request, user_id):
-#         target_user = CustomUser.objects.filter(id=user_id).first()
-#         if not target_user:
-#             return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-        
-#         if target_user == request.user:
-#             return Response({"error": "You cannot follow yourself"}, status=status.HTTP_400_BAD_REQUEST)
-#         if target_user in request.user.following.all():
-#             return Response({"message": "Already following"}, status=status.HTTP_200_OK)
-        
-        
-#         request.user.following.add(target_user)
-#         return Response({"message": f"You are now following {target_user.username}"}, status=status.HTTP_200_OK)
-    
-# class UnfollowUserView(APIView):
-#     permission_classes = [permissions.IsAuthenticated]
-    
-#     def post(self, request, user_id):
-#         target_user = CustomUser.objects.filter(id=user_id).first()
-#         if not target_user:
-#             return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-        
-#         if target_user not in request.user.following.all():
-#             return Response({"message": "You are not following this user"}, status=status.HTTP_200_OK)
-        
-#         request.user.following.remove(target_user)
-#         return Response({"message": f"You unfollowed {target_user.username}"}, status=status.HTTP_200_OK)
 
 class RemoveFollowerView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -166,25 +140,29 @@ class RemoveFollowerView(APIView):
         
         return Response({"message": "Follower removed successfully."}, status=200)
     
-class FollowersListView(APIView):
+class StandardResultSetPagination(PageNumberPagination):
+    page_size = 5
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+    
+class FollowersListView(generics.ListAPIView):
+    serializer_class = UserMiniSerializer
     permission_classes = [AllowAny]
+    pagination_class = StandardResultSetPagination
     
-    def get(self, request, user_id):
-        user = get_object_or_404(CustomUser, id=user_id)
-        followers = user.followers.all()
-        
-        serializer = UserMiniSerializer(followers, many=True)
-        return Response(serializer.data)
+    def get_queryset(self):
+        user = get_object_or_404(CustomUser, id=self.kwargs['user_id'])
+        return user.followers.all()
     
-class FollowingListView(APIView):
+class FollowingListView(generics.ListAPIView):
+    serializer_class = UserMiniSerializer
     permission_classes = [AllowAny]
+    pagination_class = StandardResultSetPagination
     
-    def get(self, request, user_id):
-        user = get_object_or_404(CustomUser, id=user_id)
-        following = user.following.all()
+    def get_queryset(self):
+        user = get_object_or_404(CustomUser, id=self.kwargs['user_id'])
+        return user.followers.all()
         
-        serializer = UserMiniSerializer(following, many=True)
-        return Response(serializer.data)
 
 class MutualFollowersView(APIView):
     permission_classes = [permissions.AllowAny]
@@ -452,3 +430,54 @@ class PendingFollowRequestsView(APIView):
         ]
         return Response(data)
     
+class CancelFollowRequestView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, user_id):
+        target_user = get_object_or_404(CustomUser, id=user_id)
+        
+        follow_request = FollowRequest.objects.filter(
+            from_user=request.user,
+            to_user=target_user,
+            accepted=False
+        ).first()
+        
+        if not follow_request:
+            return Response({
+                "message":"No pending follow request to cancel."
+            })
+            
+        follow_request.delete()
+        
+        Notification.objects.create(
+            user=target_user,
+            message=f"{request.user.username} canceled their follow request."
+        )
+        
+        return Response({"message": "Follow request canceled."}, status=status.HTTP_200_OK)
+    
+class SentFollowRequestView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        sent_requests = FollowRequest.objects.filter(from_user=request.user, accepted=False)
+        data = [
+            {
+                "id": fr.id,
+                "to_user": fr.to_user.username,
+                "to_user_id": fr.to_user.id,
+                "created_at": fr.created_at,
+            }
+            for fr in sent_requests
+        ]
+        return Response(data)
+
+class NotificationMarkAllReadView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def patch(self, request):
+        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        return Response(
+            {"message": "All notifications marked as read."}, status=status.HTTP_200_OK)
+        
+        

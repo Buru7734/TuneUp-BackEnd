@@ -21,7 +21,10 @@ from .views import (
     SendFollowRequestView,
     AcceptFollowRequestView,
     RejectFollowRequestView,
-    PendingFollowRequestsView
+    PendingFollowRequestsView,
+    CancelFollowRequestView,
+    SentFollowRequestView,
+    NotificationMarkAllReadView
 )
 
 
@@ -46,5 +49,8 @@ urlpatterns = [
     path('users/<int:user_id>/follow-request/', SendFollowRequestView.as_view(), name="send-follow-request"),
     path('follow-request/<int:request_id>/accept/', AcceptFollowRequestView.as_view(), name="accept-follow-request"),
     path('follow-request/<int:request_id>/reject/', RejectFollowRequestView.as_view(), name="reject-follow-request"),
-    path('follow-request/pending/', PendingFollowRequestsView.as_view(), name="pending-follow-request")
+    path('follow-request/pending/', PendingFollowRequestsView.as_view(), name="pending-follow-request"),
+    path('users/<int:user_id>/cancel-follow-request', CancelFollowRequestView.as_view(), name='cancel-follow-request'),
+    path('users/follow-requests/sent/', SentFollowRequestView.as_view(), name='sent-follow-requests'),
+    path('notifications/mark-all-read/', NotificationMarkAllReadView.as_view(), name='notifications-mark-all-read'),
 ]
