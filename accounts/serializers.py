@@ -114,6 +114,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     is_mutual = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
     follow_status = serializers.SerializerMethodField()
+    is_blocked = serializers.SerializerMethodField()
     
     
     class Meta:
@@ -144,8 +145,18 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             'is_followed_by',
             'is_mutual',
             'is_owner',
-            'follow_status'
+            'follow_status',
+            'is_blocked'
         ]
+        
+    def get_is_blocked(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        return (
+            obj in request.user.blocked_users.all()
+            or request.user in obj.blocked_users.all()
+        )
 
     def get_followers_count(self, obj):
         return obj.followers.count()

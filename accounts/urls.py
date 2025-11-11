@@ -24,7 +24,11 @@ from .views import (
     PendingFollowRequestsView,
     CancelFollowRequestView,
     SentFollowRequestView,
-    NotificationMarkAllReadView
+    NotificationMarkAllReadView,
+    UnreadNotificationCountView,
+    BlockUserView,
+    UnblockUserView,
+    BlockedUsersListView
 )
 
 
@@ -53,4 +57,8 @@ urlpatterns = [
     path('users/<int:user_id>/cancel-follow-request', CancelFollowRequestView.as_view(), name='cancel-follow-request'),
     path('users/follow-requests/sent/', SentFollowRequestView.as_view(), name='sent-follow-requests'),
     path('notifications/mark-all-read/', NotificationMarkAllReadView.as_view(), name='notifications-mark-all-read'),
+    path('notifications/unread-count/', UnreadNotificationCountView.as_view(), name='unread-notification-count'),
+    path('users/<int:user_id>/block/', BlockUserView.as_view(), name='block_user'),
+    path('users/<int:user_id>/unblock/', UnblockUserView.as_view(), name='unblock_user'),
+    path('users/blocked/', BlockedUsersListView.as_view(), name='blocked_users_list')
 ]

@@ -14,6 +14,8 @@ from datetime import timedelta
 from django.db.models.functions import Coalesce
 import math, random
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.exceptions import PermissionDenied
+
  
 
 User = get_user_model()
@@ -83,6 +85,16 @@ class UserListView(generics.ListAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        qs = User.objects.all()
+        if user.is_authenticated:
+            qs = qs.exclude(id__in=user.blocked_users.values_list("id", flat=True))
+            qs = qs.exclude(id__in=user.blocked_by.values_list("id", flat=True))
+        return qs
+            
+        
 
 
 class UserDetailView(generics.RetrieveAPIView):
@@ -114,14 +126,34 @@ class NotificationMarkReadView(generics.UpdateAPIView):
         notification = self.get_object()
         notification.is_read = True
         notification.save(update_fields=['is_read'])
-        return Response({"message": "Notification marked as read."}, status=200)
+        
+        unread_count = Notification.objects.filter(user=request.user, is_read=False).count()
+        
+        return Response({
+            "message": "Notification marked as read.",
+            "unread_count": unread_count
+            }, status=200)
+    
+       
 
 class PublicProfileView(generics.RetrieveAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = PublicProfileSerializer
     permission_classes = [permissions.AllowAny]
     lookup_field = "id"
-   
+    
+    def get_object(self):
+        obj = super().get_object()
+        request = self.request
+        
+        if request.user.is_authenticated:
+            if(
+                obj in request.user.blocked_users.all()
+                or request.user in obj.blocked_users.all()
+            ):
+                raise PermissionDenied("You cannot view this profile")
+        return obj
+    
     def get_serializer_context(self):
         context = super().get_serializer_context()
         context['request'] = self.request
@@ -213,7 +245,9 @@ class FollowSuggestionsView(APIView):
 
         # A base queryset of all other users, excluding yourself and people you already follow
         qs = CustomUser.objects.exclude(id__in=already_following).exclude(id=user.id)
-
+        
+        qs = qs.exclude(id_in=user.blocked_users.values_list("id", flat=True))
+        qs = qs.exclude(id_in=user.blocked_by.values_list("id", flat=True))
         # Annotate suggestion relevance:
         qs = qs.annotate(
             # Same city score
@@ -272,6 +306,8 @@ class AdvancedFollowSuggestionsView(APIView):
 
         # ✅ 2. Exclude self + already following
         qs = CustomUser.objects.exclude(id=user.id).exclude(id__in=already_following)
+        qs = qs.exclude(id_in=user.blocked_users.values_list("id", flat=True))
+        qs = qs.exclude(id_in=user.blocked_by.values_list("id", flat=True))
 
         # ✅ 3. Exclude inactive users
         recent_cutoff = timezone.now() - timedelta(days=30)
@@ -353,6 +389,54 @@ class AdvancedFollowSuggestionsView(APIView):
 
         return Response(response)
     
+
+class BlockUserView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, user_id):
+        target_user = get_object_or_404(CustomUser, id=user_id)
+        
+        if target_user == request.user:
+            return Response({"error":"You cannot block yourself."},status=status.HTTP_400_BAD_REQUEST)
+        
+        request.user.following.remove(target_user)
+        request.user.followers.remove(target_user)
+        FollowRequest.objects.filter(
+            Q(from_user=request.user, to_user=target_user) |
+            Q(from_user=target_user, to_user=request.user)
+        ).delete()
+        
+        request.user.blocked_users.add(target_user)
+        
+        Notification.objects.create(
+            user=target_user,
+            message=f"{request.user.username} has blocked you."
+        )
+        
+        return Response({"message":f"You blocked {target_user.username}."}, status=status.HTTP_200_OK)
+    
+class UnblockUserView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, user_id):
+        target_user = get_object_or_404(CustomUser, id=user_id)
+        
+        if not request.user.blocked_users.filter(id=target_user.id).exists():
+            return Response({"message":"User is not blocked."}, status=200)
+        
+        request.user.blocked_users.remove(target_user)
+        
+        return Response({"message":f"You unblocked {target_user.username}"}, status=200)
+    
+class BlockedUsersListView(generics.ListAPIView):
+    serializer_class = UserMiniSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = PageNumberPagination
+    
+    def get_queryset(self):
+        return self.request.user.blocked_users.all().order_by('username')
+    
+    
 class SendFollowRequestView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     
@@ -362,6 +446,9 @@ class SendFollowRequestView(APIView):
         if target_user == request.user:
             return Response({"error": "You cannot follow yourself."}, status=status.HTTP_400_BAD_REQUEST)
         
+        if target_user in request.user.blocked_users.all() or request.user in target_user.blocked_users.all():
+            return Response({"error": "You cannot interact with this user."},status=400)
+    
         follow_request, created = FollowRequest.objects.get_or_create(
             from_user=request.user,
             to_user=target_user
@@ -477,7 +564,15 @@ class NotificationMarkAllReadView(APIView):
     
     def patch(self, request):
         Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
-        return Response(
-            {"message": "All notifications marked as read."}, status=status.HTTP_200_OK)
+        unread_count = 0
+        return Response({
+            "message": "All notifications marked as read.",
+            "unread_count": unread_count
+        }, status=status.HTTP_200_OK)
         
-        
+class UnreadNotificationCountView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        count = Notification.objects.filter(user=request.user, is_read=False).count()
+        return Response({"unread_count": count}, status=status.HTTP_200_OK)
