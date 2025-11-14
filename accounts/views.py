@@ -717,3 +717,64 @@ class UserFeedView(APIView):
         serializer = ActivityItemSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
     
+class UserSearchView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        q = request.query_params.get("q", "").strip()
+        skill_id = request.query_params.get("skill")
+        city = request.query_params.get("city")
+        country = request.query_params.get("country")
+        
+        user = request.user
+        
+        blocked_ids = set(user.blocks.values_list("id", flat=True))
+        blocked_by_ids = set(user.blocked_by.values_list("id", flat=True))
+        excluded_ids = blocked_ids.union(blocked_by_ids)
+        
+        qs = CustomUser.objects.exclude(id__in=excluded_ids)
+        cutoff = timezone.now() - timedelta(days=30)
+        
+        if q:
+            qs = qs.filter(
+                Q(username__icontains=q) |
+                Q(bio__icontains=q)
+            )
+            
+        if skill_id:
+            qs =qs.filter(skills__id=skill_id)
+            
+        if city:
+            qs = qs.filter(city__iexact=city)
+        if country:
+            qs =qs.filter(country__iexact=country)
+        
+        qs = qs.annotate(
+            mutual_followers=Count(
+                "followers",
+                filter=Q(followers__in=user.followers.all()),
+                distinct=True
+            ),
+            shared_skills=Count(
+                "skills",
+                filter=Q(skills__in=user.skills.all()),
+                distinct=True
+            ),
+            recent_activity=Count(
+                "reviews_received",
+                filter=Q(reviews_received__created_at__gte=cutoff),
+                distinct=True
+            )
+            
+        ).order_by(
+            "-mutual_followers",
+            "-shared_skills",
+            "-recent_activity",
+            "username"
+        )
+        
+        paginator = StandardResultSetPagination()
+        page = paginator.paginate_queryset(qs, request)
+        serializer = UserSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+    

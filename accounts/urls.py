@@ -29,7 +29,8 @@ from .views import (
     BlockUserView,
     UnblockUserView,
     BlockedUsersListView,
-    UserFeedView
+    UserFeedView,
+    UserSearchView
 )
 
 
@@ -63,5 +64,5 @@ urlpatterns = [
     path('users/<int:user_id>/unblock/', UnblockUserView.as_view(), name='unblock_user'),
     path('users/blocked/', BlockedUsersListView.as_view(), name='blocked_users_list'),
     path('feed/', UserFeedView.as_view(), name='user-feed'),
-    
+    path('search/', UserSearchView.as_view(), name='user-search')
 ]
