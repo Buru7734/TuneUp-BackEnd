@@ -258,4 +258,19 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         
         return "none"
     
+class ActivityItemSerializer(serializers.Serializer):
+    type = serializers.ChoiceField(choices=["gig", "review"])
+    id = serializers.IntegerField()
+    created_at = serializers.DateTimeField()
     
+    user_id = serializers.IntegerField()
+    username = serializers.CharField()
+    profile_image_url = serializers.DateTimeField()
+    
+    title = serializers.CharField(required=False)
+    location = serializers.CharField(required=False)
+    date = serializers.DateField(required=False)
+    rating = serializers.DecimalField(max_digits=3, decimal_places=2, required=False)
+    comment = serializers.CharField(required=False)
+    reviewed_user_id = serializers.IntegerField(required=False)
+    reviewed_username = serializers.CharField(required=False)

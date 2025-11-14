@@ -28,7 +28,8 @@ from .views import (
     UnreadNotificationCountView,
     BlockUserView,
     UnblockUserView,
-    BlockedUsersListView
+    BlockedUsersListView,
+    UserFeedView
 )
 
 
@@ -60,5 +61,7 @@ urlpatterns = [
     path('notifications/unread-count/', UnreadNotificationCountView.as_view(), name='unread-notification-count'),
     path('users/<int:user_id>/block/', BlockUserView.as_view(), name='block_user'),
     path('users/<int:user_id>/unblock/', UnblockUserView.as_view(), name='unblock_user'),
-    path('users/blocked/', BlockedUsersListView.as_view(), name='blocked_users_list')
+    path('users/blocked/', BlockedUsersListView.as_view(), name='blocked_users_list'),
+    path('feed/', UserFeedView.as_view(), name='user-feed'),
+    
 ]
