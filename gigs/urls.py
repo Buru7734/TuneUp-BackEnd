@@ -1,5 +1,7 @@
 from django.urls import path
-from .views import GigListCreateView, GigDetailView, ApplyToGigView, GigApplicationsView, ReviewApplicationView, TagListView, TagDetailView
+from .views.gigs_views import GigListCreateView, GigDetailView
+from .views.tag_views import TagListView, TagDetailView
+from .views.applications_views import ApplyToGigView, GigApplicationsView, ReviewApplicationView
 
 urlpatterns = [
     path('tags/', TagListView.as_view(), name='tag-list'),
