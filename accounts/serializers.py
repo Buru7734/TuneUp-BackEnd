@@ -154,8 +154,8 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return False
         return (
-            obj in request.user.blocked_users.all()
-            or request.user in obj.blocked_users.all()
+            obj in request.user.blocks.all()
+            or request.user in obj.blocks.all()
         )
 
     def get_followers_count(self, obj):

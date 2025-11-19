@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Gig, Tag
+from .models import Gig, Tag, GigApplication
 
 class GigSerializer(serializers.ModelSerializer):
     class Meta:
@@ -16,13 +16,14 @@ class GigApplicationSerializer(serializers.ModelSerializer):
     gig_title = serializers.ReadOnlyField(source='gig.title')
     
     class Meta:
+        model = GigApplication
         fields = [
             'id',
-            'applicants',
             'gig',
             'gig_title',
             'message',
             'status',
-            'created_at'
+            'created_at',
+            'applicant_username'
         ]
-        read_only_fields = ['applicants', 'status', 'created_at']
+        read_only_fields = ['applicant_username', 'status', 'created_at']

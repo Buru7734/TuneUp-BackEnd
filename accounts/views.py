@@ -1,827 +1,138 @@
-from rest_framework import status, permissions, generics
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from django.contrib.auth import authenticate, get_user_model
-from .serializers import UserSerializer, NotificationSerializer, PublicProfileSerializer, FollowUserSerializer, UserMiniSerializer, ActivityItemSerializer
-from .models import CustomUser, Notification, FollowRequest
-from rest_framework.permissions import AllowAny
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.shortcuts import get_object_or_404
-from django.db.models import Count, Q, FloatField, Value
-from django.utils import timezone
-from django.core.cache import cache
-from datetime import timedelta
-from django.db.models.functions import Coalesce
-import math, random
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.exceptions import PermissionDenied
-from gigs.models import Gig
-from reviews.models import Review
-from django.utils.dateparse import parse_datetime
+# from rest_framework import status, permissions, generics
+# from rest_framework.response import Response
+# from rest_framework.views import APIView
+# from django.contrib.auth import authenticate, get_user_model
+# from .serializers import UserSerializer, NotificationSerializer, PublicProfileSerializer, FollowUserSerializer, UserMiniSerializer, ActivityItemSerializer
+# from .models import CustomUser, Notification, FollowRequest
+# from rest_framework.permissions import AllowAny
+# from rest_framework_simplejwt.tokens import RefreshToken
+# from django.shortcuts import get_object_or_404
+# from django.db.models import Count, Q, FloatField, Value
+# from django.utils import timezone
+# from django.core.cache import cache
+# from datetime import timedelta
+# from django.db.models.functions import Coalesce
+# import math, random
+# from rest_framework.pagination import PageNumberPagination
+# from rest_framework.exceptions import PermissionDenied
+# from gigs.models import Gig
+# from reviews.models import Review
+# from django.utils.dateparse import parse_datetime
 
 
 
  
 
-User = get_user_model()
-
-class RegisterView(generics.CreateAPIView):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-    permission_classes = [permissions.AllowAny]
-    
-    def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-         # Run serializer validation
-        user = User.objects.get(username=response.data['username'])
-         # Generate JWT tokens
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            'message': 'User created successfully',
-            'refresh': str(refresh),
-            'access': str(refresh.access_token),
-            'user': response.data
-        }, status=status.HTTP_201_CREATED)
-        
+# User = get_user_model()
 
 
+    
+# class StandardResultSetPagination(PageNumberPagination):
+#     page_size = 5
+#     page_size_query_param = 'page_size'
+#     max_page_size = 50
+    
 
-class LoginView(APIView):
-    permission_classes = [permissions.AllowAny]
-    
-    def post(self, request):
-        username = request.data.get('username')
-        password = request.data.get('password')
-        user = authenticate(username=username, password=password)
-        if user:
-            refresh = RefreshToken.for_user(user)
-            return Response({
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-                'user': UserSerializer(user).data
-            }, status=status.HTTP_200_OK)
-        return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
-        
-class ProfileView(generics.RetrieveUpdateAPIView):
-    serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_object(self):
-        return self.request.user
-    
-    def put(self,request):
-        serializer= UserSerializer(request.user, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def delete(self, request):
-        user = request.user
-        username = user.username
-        user.delete()
-        return Response(
-            {"message": f"User '{username}' deleted successfully."},
-            status=status.HTTP_204_NO_CONTENT
-            )
-    
-class UserListView(generics.ListAPIView):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_queryset(self):
-        user = self.request.user
-        qs = User.objects.all()
-        if user.is_authenticated:
-            qs = qs.exclude(id__in=user.blocked_users.values_list("id", flat=True))
-            qs = qs.exclude(id__in=user.blocked_by.values_list("id", flat=True))
-        return qs
-            
-        
+# class AdvancedFollowSuggestionsView(APIView):
+#     permission_classes = [permissions.AllowAny]
 
+#     def get(self, request, user_id):
+#         user = get_object_or_404(CustomUser, id=user_id)
+#         cache_key = f"suggestions_{user_id}"
 
-class UserDetailView(generics.RetrieveAPIView):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-    permission_classes = [permissions.AllowAny]
-    lookup_field = 'id'
-    
-class NotificationPagination(PageNumberPagination):
-    page_size = 10
-    
-class NotificationListView(generics.ListAPIView):
-    serializer_class = NotificationSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    pagination_class = NotificationPagination
-    
-    def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user).order_by('-created_at')
-    
-class NotificationMarkReadView(generics.UpdateAPIView):
-    serializer_class = NotificationSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_object(self):
-        from django.shortcuts import get_object_or_404
-        return get_object_or_404(Notification, id=self.kwargs['id'], user=self.request.user)
-    
-    def patch(self, request, *args, **kwargs):
-        notification = self.get_object()
-        notification.is_read = True
-        notification.save(update_fields=['is_read'])
-        
-        unread_count = Notification.objects.filter(user=request.user, is_read=False).count()
-        
-        return Response({
-            "message": "Notification marked as read.",
-            "unread_count": unread_count
-            }, status=200)
-    
-       
+#         # ✅ 1. Check cache
+#         cached = cache.get(cache_key)
+#         if cached:
+#             return Response(cached)
 
-class PublicProfileView(generics.RetrieveAPIView):
-    queryset = CustomUser.objects.all()
-    serializer_class = PublicProfileSerializer
-    permission_classes = [permissions.AllowAny]
-    lookup_field = "id"
+#         already_following = set(user.following.values_list("id", flat=True))
+
+#         # ✅ 2. Exclude self + already following
+#         qs = CustomUser.objects.exclude(id=user.id).exclude(id__in=already_following)
+#         qs = qs.exclude(id_in=user.blocked_users.values_list("id", flat=True))
+#         qs = qs.exclude(id_in=user.blocked_by.values_list("id", flat=True))
+
+#         # ✅ 3. Exclude inactive users
+#         recent_cutoff = timezone.now() - timedelta(days=30)
+#         qs = qs.filter(last_login__gte=recent_cutoff)
+
+#         # ✅ 4. Annotate with base signals
+#         qs = qs.annotate(
+#             same_city=Count("id", filter=Q(city=user.city)),
+#             shared_skills=Count("skills", filter=Q(skills__in=user.skills.all()), distinct=True),
+#             mutual_followers=Count("followers", filter=Q(followers__in=user.followers.all()), distinct=True),
+#             followed_by_following=Count("followers", filter=Q(followers__in=user.following.all()), distinct=True),
+#         )
+
+#         # ✅ 5. Trending score (followers gained recently)
+#         trending_cutoff = timezone.now() - timedelta(days=7)
+#         qs = qs.annotate(
+#             trending=Count("followers", filter=Q(followers__last_login__gte=trending_cutoff))
+#         )
+
+#         suggestions = []
+
+#         # ✅ 6. Convert queryset into list so we can compute distances + scoring
+#         for candidate in qs:
+#             # Distance (apply only if both have lat/lng)
+#             distance_score = 0
+#             if user.latitude and user.longitude and candidate.latitude and candidate.longitude:
+#                 try:
+#                     lat1, lon1 = math.radians(user.latitude), math.radians(user.longitude)
+#                     lat2, lon2 = math.radians(candidate.latitude), math.radians(candidate.longitude)
+#                     distance = 6371 * math.acos(
+#                         math.cos(lat1)*math.cos(lat2)*math.cos(lon2 - lon1) +
+#                         math.sin(lat1)*math.sin(lat2)
+#                     )
+#                     distance_score = max(0, 10 - (distance / 10))
+#                 except:
+#                     distance_score = 0
+
+#             # Role score
+#             role_score = 2 if getattr(candidate, "role", None) == "musician" else 0
+
+#             # Random freshness
+#             random_boost = random.uniform(0, 1)
+
+#             # Final score
+#             score = (
+#                 candidate.mutual_followers * 4 +
+#                 candidate.followed_by_following * 3 +
+#                 candidate.shared_skills * 2 +
+#                 candidate.same_city * 2 +
+#                 candidate.trending * 1 +
+#                 distance_score * 1 +
+#                 role_score +
+#                 random_boost
+#             )
+
+#             suggestions.append({
+#                 "user": candidate,
+#                 "score": round(score, 3)
+#             })
+
+#         # ✅ 7. Sort by score descending
+#         suggestions.sort(key=lambda x: x["score"], reverse=True)
+
+#         # ✅ 8. Serialize top results
+#         results = [
+#             {
+#                 "id": s["user"].id,
+#                 "username": s["user"].username,
+#                 "profile_image": s["user"].profile_image.url if s["user"].profile_image else None,
+#                 "score": s["score"]
+#             }
+#             for s in suggestions[:20]
+#         ]
+
+#         response = {"count": len(results), "results": results}
+
+#         # ✅ 9. Cache for 10 minutes
+#         cache.set(cache_key, response, timeout=600)
+
+#         return Response(response)
     
-    def get_object(self):
-        obj = super().get_object()
-        request = self.request
-        
-        if request.user.is_authenticated:
-            if(
-                obj in request.user.blocked_users.all()
-                or request.user in obj.blocked_users.all()
-            ):
-                raise PermissionDenied("You cannot view this profile")
-        return obj
-    
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        context['request'] = self.request
-        return context
-
-class RemoveFollowerView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def post(self, request, user_id):
-        follower = get_object_or_404(CustomUser, id=user_id)
-        
-        if not request.user.followers.filter(id=follower.id).exists():
-            return Response({"error": "This user is not your follower."}, status=400)
-        
-        request.user.followers.remove(follower)
-        
-        return Response({"message": "Follower removed successfully."}, status=200)
-    
-class StandardResultSetPagination(PageNumberPagination):
-    page_size = 5
-    page_size_query_param = 'page_size'
-    max_page_size = 50
-    
-class FollowersListView(generics.ListAPIView):
-    serializer_class = UserMiniSerializer
-    permission_classes = [AllowAny]
-    pagination_class = StandardResultSetPagination
-    
-    def get_queryset(self):
-        user = get_object_or_404(CustomUser, id=self.kwargs['user_id'])
-        return user.followers.all()
-    
-class FollowingListView(generics.ListAPIView):
-    serializer_class = UserMiniSerializer
-    permission_classes = [AllowAny]
-    pagination_class = StandardResultSetPagination
-    
-    def get_queryset(self):
-        user = get_object_or_404(CustomUser, id=self.kwargs['user_id'])
-        return user.followers.all()
-        
-
-class MutualFollowersView(APIView):
-    permission_classes = [permissions.AllowAny]
-    
-    def get(self, request, user_id, other_id):
-        user1 = get_object_or_404(CustomUser, id=user_id)
-        user2 = get_object_or_404(CustomUser, id=other_id)
-        
-        user2_follower_ids = user2.followers.values_list("id", flat=True)
-        
-        mutuals = user1.followers.filter(id__in=user2_follower_ids)
-        
-        serializer = UserMiniSerializer(mutuals, many=True)
-        
-        return Response({
-            "count": mutuals.count(),
-            "results": serializer.data
-        })
-        
-class MutualFollowingView(APIView):
-    permission_classes = [permissions.AllowAny]
-    
-    def get(self, request, user_id, other_id):
-        user1 = get_object_or_404(CustomUser, id=user_id)
-        user2 = get_object_or_404(CustomUser, id=other_id)
-        
-        user1_follows_user2 = user2.followers.filter(id=user1.id).exists()
-        
-        user2_follows_user1 = user1.followers.filter(id=user2.id).exists()
-        
-        mutual = user1_follows_user2 and user2_follows_user1
-        
-        return Response({
-            "mutual_following": mutual,
-            "user1_follows_user2": user1_follows_user2,
-            "user2_follows_user1": user2_follows_user1
-        })
-        
-        
-class FollowSuggestionsView(APIView):
-    permission_classes = [permissions.AllowAny]
-
-    def get(self, request, user_id):
-        user = get_object_or_404(CustomUser, id=user_id)
-
-        # Get IDs of people the user is already following
-        already_following = user.following.values_list("id", flat=True)
-
-        # A base queryset of all other users, excluding yourself and people you already follow
-        qs = CustomUser.objects.exclude(id__in=already_following).exclude(id=user.id)
-        
-        qs = qs.exclude(id_in=user.blocked_users.values_list("id", flat=True))
-        qs = qs.exclude(id_in=user.blocked_by.values_list("id", flat=True))
-        # Annotate suggestion relevance:
-        qs = qs.annotate(
-            # Same city score
-            same_city=Count("id", filter=Q(city=user.city)),
-
-            # Skill overlap score
-            shared_skills=Count("skills", filter=Q(skills__in=user.skills.all()), distinct=True),
-
-            # Mutual followers (people who follow both)
-            mutual_followers=Count(
-                "followers",
-                filter=Q(followers__in=user.followers.all()),
-                distinct=True
-            ),
-
-            # People you follow who follow them
-            followed_by_following=Count(
-                "followers",
-                filter=Q(followers__in=user.following.all()),
-                distinct=True
-            )
-        ).order_by(
-            "-mutual_followers",
-            "-followed_by_following",
-            "-shared_skills",
-            "-same_city",
-            "username",
-        )
-
-        # Limit results
-        results = qs[:20]
-
-        serializer = UserMiniSerializer(results, many=True)
-
-        return Response({
-            "count": qs.count(),
-            "results": serializer.data,
-        })
-        
 
 
 
-class AdvancedFollowSuggestionsView(APIView):
-    permission_classes = [permissions.AllowAny]
-
-    def get(self, request, user_id):
-        user = get_object_or_404(CustomUser, id=user_id)
-        cache_key = f"suggestions_{user_id}"
-
-        # ✅ 1. Check cache
-        cached = cache.get(cache_key)
-        if cached:
-            return Response(cached)
-
-        already_following = set(user.following.values_list("id", flat=True))
-
-        # ✅ 2. Exclude self + already following
-        qs = CustomUser.objects.exclude(id=user.id).exclude(id__in=already_following)
-        qs = qs.exclude(id_in=user.blocked_users.values_list("id", flat=True))
-        qs = qs.exclude(id_in=user.blocked_by.values_list("id", flat=True))
-
-        # ✅ 3. Exclude inactive users
-        recent_cutoff = timezone.now() - timedelta(days=30)
-        qs = qs.filter(last_login__gte=recent_cutoff)
-
-        # ✅ 4. Annotate with base signals
-        qs = qs.annotate(
-            same_city=Count("id", filter=Q(city=user.city)),
-            shared_skills=Count("skills", filter=Q(skills__in=user.skills.all()), distinct=True),
-            mutual_followers=Count("followers", filter=Q(followers__in=user.followers.all()), distinct=True),
-            followed_by_following=Count("followers", filter=Q(followers__in=user.following.all()), distinct=True),
-        )
-
-        # ✅ 5. Trending score (followers gained recently)
-        trending_cutoff = timezone.now() - timedelta(days=7)
-        qs = qs.annotate(
-            trending=Count("followers", filter=Q(followers__last_login__gte=trending_cutoff))
-        )
-
-        suggestions = []
-
-        # ✅ 6. Convert queryset into list so we can compute distances + scoring
-        for candidate in qs:
-            # Distance (apply only if both have lat/lng)
-            distance_score = 0
-            if user.latitude and user.longitude and candidate.latitude and candidate.longitude:
-                try:
-                    lat1, lon1 = math.radians(user.latitude), math.radians(user.longitude)
-                    lat2, lon2 = math.radians(candidate.latitude), math.radians(candidate.longitude)
-                    distance = 6371 * math.acos(
-                        math.cos(lat1)*math.cos(lat2)*math.cos(lon2 - lon1) +
-                        math.sin(lat1)*math.sin(lat2)
-                    )
-                    distance_score = max(0, 10 - (distance / 10))
-                except:
-                    distance_score = 0
-
-            # Role score
-            role_score = 2 if getattr(candidate, "role", None) == "musician" else 0
-
-            # Random freshness
-            random_boost = random.uniform(0, 1)
-
-            # Final score
-            score = (
-                candidate.mutual_followers * 4 +
-                candidate.followed_by_following * 3 +
-                candidate.shared_skills * 2 +
-                candidate.same_city * 2 +
-                candidate.trending * 1 +
-                distance_score * 1 +
-                role_score +
-                random_boost
-            )
-
-            suggestions.append({
-                "user": candidate,
-                "score": round(score, 3)
-            })
-
-        # ✅ 7. Sort by score descending
-        suggestions.sort(key=lambda x: x["score"], reverse=True)
-
-        # ✅ 8. Serialize top results
-        results = [
-            {
-                "id": s["user"].id,
-                "username": s["user"].username,
-                "profile_image": s["user"].profile_image.url if s["user"].profile_image else None,
-                "score": s["score"]
-            }
-            for s in suggestions[:20]
-        ]
-
-        response = {"count": len(results), "results": results}
-
-        # ✅ 9. Cache for 10 minutes
-        cache.set(cache_key, response, timeout=600)
-
-        return Response(response)
     
-
-class BlockUserView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def post(self, request, user_id):
-        target_user = get_object_or_404(CustomUser, id=user_id)
-        
-        if target_user == request.user:
-            return Response({"error":"You cannot block yourself."},status=status.HTTP_400_BAD_REQUEST)
-        
-        request.user.following.remove(target_user)
-        request.user.followers.remove(target_user)
-        FollowRequest.objects.filter(
-            Q(from_user=request.user, to_user=target_user) |
-            Q(from_user=target_user, to_user=request.user)
-        ).delete()
-        
-        request.user.blocked_users.add(target_user)
-        
-        Notification.objects.create(
-            user=target_user,
-            message=f"{request.user.username} has blocked you."
-        )
-        
-        return Response({"message":f"You blocked {target_user.username}."}, status=status.HTTP_200_OK)
-    
-class UnblockUserView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def post(self, request, user_id):
-        target_user = get_object_or_404(CustomUser, id=user_id)
-        
-        if not request.user.blocked_users.filter(id=target_user.id).exists():
-            return Response({"message":"User is not blocked."}, status=200)
-        
-        request.user.blocked_users.remove(target_user)
-        
-        return Response({"message":f"You unblocked {target_user.username}"}, status=200)
-    
-class BlockedUsersListView(generics.ListAPIView):
-    serializer_class = UserMiniSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    pagination_class = PageNumberPagination
-    
-    def get_queryset(self):
-        return self.request.user.blocked_users.all().order_by('username')
-    
-    
-class SendFollowRequestView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def post(self, request, user_id):
-        target_user = get_object_or_404(CustomUser, id=user_id)
-        
-        if target_user == request.user:
-            return Response({"error": "You cannot follow yourself."}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if target_user in request.user.blocked_users.all() or request.user in target_user.blocked_users.all():
-            return Response({"error": "You cannot interact with this user."},status=400)
-    
-        follow_request, created = FollowRequest.objects.get_or_create(
-            from_user=request.user,
-            to_user=target_user
-        )
-        
-        
-        if not created:
-            if follow_request.accepted:
-                return Response({"message":"You already follow this user."}, status=status.HTTP_200_OK)
-            return Response({"message":"FollowRequest already sent."}, status=status.HTTP_200_OK)
-            
-        Notification.objects.create(
-            user=target_user,
-            message=f"{request.user.username} requested to follow you."
-        )
-        
-        return Response({"message":"Follow request sent."})
-    
-class AcceptFollowRequestView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def post(self, request, request_id):
-        follow_request = get_object_or_404(
-            FollowRequest, id=request_id, to_user=request.user
-        )
-        
-        if follow_request.accepted:
-            return Response({"message":"Already accepted"}, status=status.HTTP_200_OK)
-        
-        follow_request.accepted = True
-        follow_request.save()
-        
-        follow_request.to_user.followers.add(follow_request.from_user)
-        
-        Notification.objects.create(
-            user=follow_request.from_user,
-            message=f"{request.user.username} accepted your follow request."
-        )
-        
-        return Response({"message":"Follow request accepted."}, status=status.HTTP_200_OK)
-    
-class RejectFollowRequestView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    
-    
-    def post(self, request, request_id):
-        follow_request = get_object_or_404(
-            FollowRequest, id=request_id, to_user=request.user
-        )
-        follow_request.delete()
-        return Response({"message":"Follow request rejected."}, status=status.HTTP_200_OK)
-    
-class PendingFollowRequestsView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get(self, request):
-        pending = FollowRequest.objects.filter(to_user=request.user, accepted=False)
-        data = [
-            {
-                "id": fr.id,
-                "from_user": fr.from_user.username,
-                "from_user_id": fr.from_user.id,
-                "created_at": fr.created_at
-            }
-            for fr in pending
-        ]
-        return Response(data)
-    
-class CancelFollowRequestView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def post(self, request, user_id):
-        target_user = get_object_or_404(CustomUser, id=user_id)
-        
-        follow_request = FollowRequest.objects.filter(
-            from_user=request.user,
-            to_user=target_user,
-            accepted=False
-        ).first()
-        
-        if not follow_request:
-            return Response({
-                "message":"No pending follow request to cancel."
-            })
-            
-        follow_request.delete()
-        
-        Notification.objects.create(
-            user=target_user,
-            message=f"{request.user.username} canceled their follow request."
-        )
-        
-        return Response({"message": "Follow request canceled."}, status=status.HTTP_200_OK)
-    
-class SentFollowRequestView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get(self, request):
-        sent_requests = FollowRequest.objects.filter(from_user=request.user, accepted=False)
-        data = [
-            {
-                "id": fr.id,
-                "to_user": fr.to_user.username,
-                "to_user_id": fr.to_user.id,
-                "created_at": fr.created_at,
-            }
-            for fr in sent_requests
-        ]
-        return Response(data)
-
-class NotificationMarkAllReadView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def patch(self, request):
-        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
-        unread_count = 0
-        return Response({
-            "message": "All notifications marked as read.",
-            "unread_count": unread_count
-        }, status=status.HTTP_200_OK)
-        
-class UnreadNotificationCountView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get(self, request):
-        count = Notification.objects.filter(user=request.user, is_read=False).count()
-        return Response({"unread_count": count}, status=status.HTTP_200_OK)
-
-class FeedPagination(PageNumberPagination):
-    page_size = 10
-    page_size_query_param = "page_size"
-    max_page_size = 50
-    
-class UserFeedView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    pagination_class = PageNumberPagination
-    
-    def get(self, request):
-        user = request.user
-    
-        blocked_ids = set()
-        if hasattr(user,"blocks"):
-            blocked_ids.update(user.blocks.values_list("id", flat=True))
-        if hasattr(user, "blocked_by"):
-            blocked_ids.update(user.blocked_by.values_list("id", flat=True))
-            
-        following_ids = set(user.following.exclude(id__in=blocked_ids).values_list("id", flat=True))
-        
-        include_self = request.query_params.get("include_self","true").lower()== "true"
-        if include_self:
-            following_ids.add(user.id)
-            
-        now = timezone.now()
-        recent_cutoff = now - timedelta(days=30)
-            
-        gigs_qs = (
-            Gig.objects.filter(organizer_id__in=following_ids)
-            .select_related("organizer")
-            .annotate(
-                review_count=Count("reviews", distinct=True),
-                recent_score=Count("reviews", filter=Q(created_at__gte=recent_cutoff))
-            )
-        )
-        
-        reviews_qs = (
-            Review.objects.filter(reviewer_id__in=following_ids)
-            .select_related("reviewer", "reviewed_user")
-            .order_by("-created_at")[:200]
-        )
-        
-        items = []
-        
-    
-        for g in gigs_qs:
-            age_days = max((now - g.created_at).days, 1)
-            trending_score = g.review_count * 2 + g.recent_score * 3 + (30 / age_days)
-            items.append({
-                
-                "type": "gig",
-                "id": g.id,
-                "created_at": g.created_at,
-                "user_id": g.organizer_id,
-                "username": g.organizer.username,
-                "profile_image_url": (g.organizer.profile_image.url if getattr(g.organizer, "profile_image", None)else None),
-                "title": g.title,
-                "location": getattr(g, "location", None),
-                "date": getattr(g, "date", None),
-                "score": trending_score
-                
-            })
-            
-        for r in reviews_qs:
-            age_days = max((now - r.created_at).days, 1)
-            trending_score = (10/ age_days) + (r.rating or 0)
-            items.append({
-                "type": "review",
-                "id": r.id,
-                "created_at": r.created_at,
-                "user_id": r.reviewer_id,
-                "username": r.reviewer.username,
-                "profile_image_url": (r.reviewer.profile_image.url if getattr(r.reviewer, "profile_image", None)else None),
-                "rating": r.rating,
-                "comment": r.comment,
-                "reviewed_user_id": r.reviewed_user_id,
-                "reviewed_username": r.reviewed_user.username if r.reviewed_user else None,
-                "score": trending_score
-            })
-            
-        since = request.query_params.get('since', 'all').lower()
-        
-        
-        if since != 'all':
-            now = timezone.now()
-            cutoff = None
-            
-            try:
-                if since.endswith('h'):
-                    hours = int(since[:-1])
-                    cutoff = now - timedelta(hours=hours)
-                    
-                elif since.endswith('d'):
-                    days = int(since[:-1])
-                    cutoff = now - timedelta(days=days)
-                    
-                elif since.endswith('m'):
-                    months = int(since[:-1])
-                    cutoff = now - timedelta(days=30 * months)  
-            
-                    
-                if cutoff:
-                    filtered = []
-                    for i in items:
-                        created_dt = i['created_at']
-                        if created_dt >= cutoff:
-                            filtered.append(i)
-                    items = filtered
-                   
-            except Exception as e:
-                print("SINCE FILTER ERROR:", e)
-                pass             
-        
-        
-            
-        sort_mode = request.query_params.get('sort', 'recent').lower()
-        
-        activity_type = request.query_params.get("type", "all").lower()
-        
-        if activity_type in ["gig", "gigs"]:
-            items = [i for i in items if i["type"] == "gig"]
-            
-        elif activity_type in ["review", "reviews"]:
-            items = [i for i in items if i["type"] == "review"]
-        
-        if sort_mode == "trending":    
-            items.sort(key=lambda x: x["score"], reverse=True)
-        else:
-            items.sort(key=lambda x: x["created_at"], reverse=True)
-        
-        paginator = FeedPagination()
-        page = paginator.paginate_queryset(items, request)
-        serializer = ActivityItemSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
-    
-class UserSearchView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get(self, request):
-        q = request.query_params.get("q", "").strip()
-        skill_id = request.query_params.get("skill")
-        city = request.query_params.get("city")
-        country = request.query_params.get("country")
-        
-        user = request.user
-        
-        blocked_ids = set(user.blocks.values_list("id", flat=True))
-        blocked_by_ids = set(user.blocked_by.values_list("id", flat=True))
-        excluded_ids = blocked_ids.union(blocked_by_ids)
-        
-        qs = CustomUser.objects.exclude(id__in=excluded_ids)
-
-        
-        if q:
-            qs = qs.filter(
-                Q(username__icontains=q) |
-                Q(bio__icontains=q)
-            )
-            
-        if skill_id:
-            qs =qs.filter(skills__id=skill_id)
-            
-        if city:
-            qs = qs.filter(city__iexact=city)
-        if country:
-            qs =qs.filter(country__iexact=country)
-            
-        user_skill_ids = set(user.skills.values_list("id", flat=True))
-        user_follower_ids = set(user.followers.values_list("id", flat=True))
-        
-        now = timezone.now()
-        results = []
-        
-        
-        for candidate in qs.select_related().prefetch_related("skills", "followers"):
-            
-            score = 0
-            
-            #  1. Shared Skills (strong weight)
-            candidate_skill_ids = set(candidate.skills.values_list("id", flat=True))
-            shared_skill_count = len(user_skill_ids & candidate_skill_ids)
-            score += shared_skill_count * 3
-            
-            # 2. Mutual followers
-            candidate_follower_ids = set(candidate.followers.values_list("id", flat=True))
-            mutual_followers = len(user_follower_ids & candidate_follower_ids)
-            score += mutual_followers * 2
-            
-            last_login = candidate.last_login
-            
-            if last_login:
-                days_inactive = (now - last_login).days
-                if days_inactive <= 7:
-                    score += 10
-                elif days_inactive <= 30:
-                    score += 5
-                elif days_inactive <= 60:
-                    score += 1
-                else:
-                    score -= 3
-                    
-            distance_score = 0
-            if user.latitude and user.longitude and candidate.latitude and candidate.longitude:
-                try:
-                    dist = self.geo_distance(user.latitude, user.longitude, candidate.latitude, candidate.longitude)
-                    distance_score = max(0,5 - (dist / 10))
-                except:
-                    distance_score = 0
-            score += distance_score
-            
-            if q:
-                
-                uname = candidate.username.lower()
-                q_lower = q.lower()
-                
-                if uname.startswith(q_lower):
-                    score += 5
-                elif q.lower() in uname:
-                    score += 2
-                    
-            results.append({
-                "user": candidate,
-                "score": round(score, 3)
-            })
-            
-        results.sort(key=lambda x: x["score"], reverse=True)
-        
-        paginator = StandardResultSetPagination()
-        page = paginator.paginate_queryset(results, request)
-        
-        serializer = UserSerializer([item['user'] for item in page], many=True)
-        return paginator.get_paginated_response(serializer.data)        
-        
-    def geo_distance(self, lat1, lon1, lat2, lon2):
-        lat1, lon1 = math.radians(lat1), math.radians(lon1)
-        lat2, lon2 = math.radians(lat2), math.radians(lon2)
-        
-        return 6371 * math.acos(
-            math.cos(lat1)*math.cos(lat2)*math.cos(lon2-lon1) +
-            math.sin(lat1)*math.sin(lat2)
-        )
-    
-       

@@ -26,15 +26,7 @@ class CustomUser(AbstractUser):
         related_name='following',
         blank=True
     )
-    
-    # blocked_users = models.ManyToManyField(
-    #     "self",
-    #     symmetrical=False,
-    #     related_name="blocked_by",
-    #     blank=True
-    # )
-    
-    
+        
     blocks = models.ManyToManyField(
         "self",
         symmetrical=False,

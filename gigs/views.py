@@ -52,6 +52,8 @@ class GigDetailView(APIView):
         gig = get_object_or_404(Gig, id=id)
         
         if gig.organizer != request.user:
+            print("This is the value",gig.organizer)
+            print("This is the value2", request.user)
             return Response({"error": "You can only edit your own gigs."}, status=status.HTTP_403_FORBIDDEN)
         
         serializer = GigSerializer(gig, data=request.data, partial=True)
