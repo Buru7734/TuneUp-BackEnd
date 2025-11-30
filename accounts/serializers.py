@@ -6,6 +6,7 @@ from reviews.models import Review
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
+    email = serializers.EmailField(required=False, allow_blank=True)
     skills = serializers.PrimaryKeyRelatedField(
     many=True,
     queryset=Tag.objects.all(),

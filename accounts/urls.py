@@ -39,8 +39,8 @@ from accounts.views.search_views import UserSearchView
 
 urlpatterns = [
     #Auth
-    path('register/', RegisterView.as_view()),
-    path('login/', LoginView.as_view()),
+    path('auth/register/', RegisterView.as_view()),
+    path('auth/login/', LoginView.as_view()),
     
     #Profiles
     path('profile/', ProfileView.as_view(), name='profile'),
@@ -63,6 +63,7 @@ urlpatterns = [
     path('users/<int:user_id>/cancel-follow-request/', CancelFollowRequestView.as_view(), name='cancel-follow-request'),
     path('users/follow-requests/sent/', SentFollowRequestView.as_view(), name='sent-follow-requests'),
     path('users/<int:user_id>/unfollow/', UnfollowUserView.as_view(), name="unfollow"),
+    
     
     
     #Notifications
