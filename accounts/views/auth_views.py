@@ -28,7 +28,6 @@ class RegisterView(generics.CreateAPIView):
             'message': 'User created successfully',
             'refresh': str(refresh),
             'access': str(refresh.access_token),
-            'token': str(refresh.access_token),
             'user': response.data
         }, status=status.HTTP_201_CREATED)
         
@@ -67,7 +66,6 @@ class LoginView(APIView):
             return Response({
                 'refresh': str(refresh),
                 'access': str(refresh.access_token),
-                'token': str(refresh.access_token),
                 'user': UserSerializer(user).data
             }, status=status.HTTP_200_OK)
 
